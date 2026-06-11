@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accumulator Multi-Instance</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    padding:20px;
+}
+.container{
+    width:420px;
+    background:#1e293b;
+    padding:25px;
+    border-radius:15px;
+    box-shadow:0 0 20px rgba(0,0,0,.3);
+}
+h1{text-align:center;margin-bottom:20px}
+.total{
+    font-size:48px;
+    font-weight:bold;
+    text-align:center;
+    color:#38bdf8;
+    margin-bottom:20px;
+}
+input,select{
+    width:100%;
+    padding:12px;
+    font-size:16px;
+    border:none;
+    border-radius:8px;
+    outline:none;
+}
+.main-input{margin-bottom:15px}
+.row{display:flex;gap:10px;margin-bottom:10px}
+.row button{flex:1}
+button{
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:bold;
+}
+.add{background:#22c55e;color:white}
+.subtract{background:#ef4444;color:white}
+.undo{background:#3b82f6;color:white}
+.reset{background:#f59e0b;color:white}
+.toggle,.percent-btn,.history-btn{
+    width:100%;
+    background:#8b5cf6;
+    color:white;
+    margin-top:5px;
+}
+.manage{background:#475569;color:white}
+.percent-section{
+    display:none;
+    margin-top:15px;
+    padding-top:15px;
+    border-top:1px solid #334155;
+}
+.percent-row{display:flex;gap:10px;margin-bottom:10px}
+.percent-row input{flex:1}
+.result{
+    margin-top:12px;
+    background:#0f172a;
+    padding:15px;
+    border-radius:10px;
+    text-align:center;
+    font-size:24px;
+    font-weight:bold;
+    color:#38bdf8;
+    min-height:58px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.history-panel{
+    display:none;
+    margin-top:15px;
+    background:#0f172a;
+    border-radius:10px;
+    padding:10px;
+    max-height:250px;
+    overflow-y:auto;
+}
+.history-item{
+    padding:6px 0;
+    border-bottom:1px solid #334155;
+    font-size:14px;
+}
+.clear-history{
+    margin-top:10px;
+    width:100%;
+    background:#dc2626;
+    color:white;
+}
+label{display:block;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Accumulator</h1>
+
+<label>Current Instance</label>
+<select id="instanceSelect" onchange="switchInstance()"></select>
+
+<div class="row" style="margin-top:10px">
+<button class="manage" onclick="createInstance()">New Instance</button>
+<button class="manage" onclick="renameInstance()">Rename</button>
+<button class="manage" onclick="deleteInstance()">Delete</button>
+</div>
+
+<div class="total" id="total">0.00</div>
+
+<input class="main-input" type="number" id="amount" placeholder="Enter number" step="any">
+
+<div class="row">
+<button class="add" onclick="addNumber()">Add</button>
+<button class="subtract" onclick="subtractNumber()">Subtract</button>
+</div>
+
+<div class="row">
+<button class="undo" onclick="undoLast()">Undo</button>
+<button class="reset" onclick="resetTotal()">Reset</button>
+</div>
+
+<button class="toggle" id="toggleBtn" onclick="togglePercentCalculator()">% Calculator ▼</button>
+
+<div class="percent-section" id="percentSection">
+<div class="percent-row">
+<input type="number" id="number" placeholder="Number" step="any">
+<input type="number" id="percent" placeholder="%" step="any">
+</div>
+<button class="percent-btn" onclick="increaseByPercent()">Calculate</button>
+<div class="result" id="result">-</div>
+</div>
+
+<button class="history-btn" id="historyBtn" onclick="toggleHistory()">History ▼</button>
+<div class="history-panel" id="historyPanel"></div>
+
+<button class="clear-history" onclick="clearHistory()">Clear History</button>
+
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("accumulator_instances")) || {
+    instances:{
+        "Default":{
+            total:0,
+            undoHistory:[],
+            operationHistory:[]
+        }
+    },
+    current:"Default"
+};
+
+function saveAll(){
+    localStorage.setItem("accumulator_instances", JSON.stringify(data));
+}
+
+function currentInstance(){
+    return data.instances[data.current];
+}
+
+function populateInstances(){
+    const select=document.getElementById("instanceSelect");
+    select.innerHTML="";
+    Object.keys(data.instances).forEach(name=>{
+        const opt=document.createElement("option");
+        opt.value=name;
+        opt.textContent=name;
+        if(name===data.current) opt.selected=true;
+        select.appendChild(opt);
+    });
+}
+
+function switchInstance(){
+    data.current=document.getElementById("instanceSelect").value;
+    saveAll();
+    render();
+}
+
+function createInstance(){
+    const name=prompt("Enter instance name:");
+    if(!name) return;
+    if(data.instances[name]){
+        alert("Instance already exists.");
+        return;
+    }
+    data.instances[name]={
+        total:0,
+        undoHistory:[],
+        operationHistory:[]
+    };
+    data.current=name;
+    saveAll();
+    populateInstances();
+    render();
+}
+
+function renameInstance(){
+    const newName=prompt("New name:", data.current);
+    if(!newName) return;
+    if(data.instances[newName]){
+        alert("Name already exists.");
+        return;
+    }
+    data.instances[newName]=data.instances[data.current];
+    delete data.instances[data.current];
+    data.current=newName;
+    saveAll();
+    populateInstances();
+    render();
+}
+
+function deleteInstance(){
+    const names=Object.keys(data.instances);
+    if(names.length===1){
+        alert("Cannot delete the last instance.");
+        return;
+    }
+    if(!confirm("Delete '"+data.current+"'?")) return;
+
+    delete data.instances[data.current];
+    data.current=Object.keys(data.instances)[0];
+
+    saveAll();
+    populateInstances();
+    render();
+}
+
+function render(){
+    document.getElementById("total").textContent=currentInstance().total.toFixed(2);
+    renderHistory();
+}
+
+function addNumber(){
+    const value=Number(document.getElementById("amount").value);
+    if(isNaN(value)) return;
+
+    const acc=currentInstance();
+
+    acc.undoHistory.push(acc.total);
+    acc.total+=value;
+
+    acc.operationHistory.push({
+        type:"ADD",
+        value:value,
+        total:acc.total
+    });
+
+    saveAll();
+    render();
+    document.getElementById("amount").value="";
+}
+
+function subtractNumber(){
+    const value=Number(document.getElementById("amount").value);
+    if(isNaN(value)) return;
+
+    const acc=currentInstance();
+
+    acc.undoHistory.push(acc.total);
+    acc.total-=value;
+
+    acc.operationHistory.push({
+        type:"SUBTRACT",
+        value:value,
+        total:acc.total
+    });
+
+    saveAll();
+    render();
+    document.getElementById("amount").value="";
+}
+
+function undoLast(){
+    const acc=currentInstance();
+    if(acc.undoHistory.length===0) return;
+
+    acc.total=acc.undoHistory.pop();
+
+    acc.operationHistory.push({
+        type:"UNDO",
+        total:acc.total
+    });
+
+    saveAll();
+    render();
+}
+
+function resetTotal(){
+    const acc=currentInstance();
+
+    acc.undoHistory.push(acc.total);
+
+    acc.operationHistory.push({
+        type:"RESET",
+        value:acc.total,
+        total:0
+    });
+
+    acc.total=0;
+
+    saveAll();
+    render();
+}
+
+function renderHistory(){
+    const panel=document.getElementById("historyPanel");
+    const history=currentInstance().operationHistory;
+
+    if(history.length===0){
+        panel.innerHTML="<div>No history</div>";
+        return;
+    }
+
+    panel.innerHTML=history.slice().reverse().map(item=>{
+        if(item.type==="ADD"){
+            return `<div class="history-item">+ ${item.value} = ${item.total.toFixed(2)}</div>`;
+        }
+        if(item.type==="SUBTRACT"){
+            return `<div class="history-item">- ${item.value} = ${item.total.toFixed(2)}</div>`;
+        }
+        if(item.type==="UNDO"){
+            return `<div class="history-item">Undo → ${item.total.toFixed(2)}</div>`;
+        }
+        return `<div class="history-item">Reset → 0.00</div>`;
+    }).join("");
+}
+
+function clearHistory(){
+    currentInstance().operationHistory=[];
+    saveAll();
+    renderHistory();
+}
+
+function savePercentageData(){
+    localStorage.setItem("percent_number",document.getElementById("number").value);
+    localStorage.setItem("percent_percent",document.getElementById("percent").value);
+    localStorage.setItem("percent_result",document.getElementById("result").textContent);
+}
+
+function loadPercentageData(){
+    document.getElementById("number").value=localStorage.getItem("percent_number")||"";
+    document.getElementById("percent").value=localStorage.getItem("percent_percent")||"";
+    document.getElementById("result").textContent=localStorage.getItem("percent_result")||"-";
+}
+
+function increaseByPercent(){
+    const number=Number(document.getElementById("number").value);
+    const percent=Number(document.getElementById("percent").value);
+
+    if(isNaN(number)||isNaN(percent)) return;
+
+    const addedValue=number*percent/100;
+    const finalValue=number+addedValue;
+
+    document.getElementById("result").textContent=
+        `${finalValue.toFixed(2)} . ${addedValue.toFixed(2)}`;
+
+    savePercentageData();
+}
+
+function togglePercentCalculator(){
+    const section=document.getElementById("percentSection");
+    const btn=document.getElementById("toggleBtn");
+
+    if(section.style.display==="block"){
+        section.style.display="none";
+        btn.textContent="% Calculator ▼";
+        localStorage.setItem("showPercentCalculator","false");
+    }else{
+        section.style.display="block";
+        btn.textContent="% Calculator ▲";
+        localStorage.setItem("showPercentCalculator","true");
+    }
+}
+
+function toggleHistory(){
+    const panel=document.getElementById("historyPanel");
+    const btn=document.getElementById("historyBtn");
+
+    if(panel.style.display==="block"){
+        panel.style.display="none";
+        btn.textContent="History ▼";
+    }else{
+        panel.style.display="block";
+        btn.textContent="History ▲";
+        renderHistory();
+    }
+}
+
+function loadSettings(){
+    if(localStorage.getItem("showPercentCalculator")==="true"){
+        document.getElementById("percentSection").style.display="block";
+        document.getElementById("toggleBtn").textContent="% Calculator ▲";
+    }
+}
+
+document.getElementById("number").addEventListener("input",savePercentageData);
+document.getElementById("percent").addEventListener("input",savePercentageData);
+
+populateInstances();
+render();
+loadSettings();
+loadPercentageData();
+</script>
+</body>
+</html>
